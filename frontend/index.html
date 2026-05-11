@@ -261,7 +261,8 @@ async function apiFetch(path, opts = {}) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Request failed' }));
-    throw new Error(err.detail || 'Request failed');
+    const msg = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail) || 'Request failed';
+    throw new Error(msg);
   }
   if (res.status === 204) return null;
   return res.json();
@@ -346,8 +347,8 @@ function useAuth() {
     setUser(u);
   };
 
-  const register = async (name, email, password, role) => {
-    const data = await apiFetch('/auth/register', { method: 'POST', body: { name, email, password, role } });
+  const register = async (display_name, email, password, role) => {
+    const data = await apiFetch('/auth/register', { method: 'POST', body: { display_name, email, password, role } });
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
     const u = await apiFetch('/auth/me');
@@ -361,7 +362,7 @@ function useAuth() {
 // ─── AUTH PAGE ────────────────────────────────────────────────────────────────
 function AuthPage({ onLogin, onRegister }) {
   const [tab, setTab] = useState('login');
-  const [form, setForm] = useState({ title: '', email: '', password: '', role: 'member' });
+  const [form, setForm] = useState({ display_name: '', email: '', password: '', role: 'member' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -474,7 +475,7 @@ function WorkspaceModal({ workspace, onClose, onSave }) {
 }
 
 // ─── TASK MODAL ───────────────────────────────────────────────────────────────
-function Work ItemModal({ item, workspaceId, members, onClose, onSave }) {
+function WorkitemModal({ item, workspaceId, members, onClose, onSave }) {
   const [form, setForm] = useState({
     title: item?.title || '', description: item?.body || '',
     status: item?.status || 'backlog', priority: item?.priority || 'medium',
@@ -544,12 +545,12 @@ function Work ItemModal({ item, workspaceId, members, onClose, onSave }) {
 function Dashboard({ user }) {
   const [stats, setStats] = useState(null);
   const [activity, setActivity] = useState([]);
-  const [myWork Items, setMyWork Items] = useState([]);
+  const [myWorkItems, setmyWorkItems] = useState([]);
 
   useEffect(() => {
     apiFetch('/dashboard/summary').then(setStats).catch(() => {});
     apiFetch('/dashboard/feed').then(setActivity).catch(() => {});
-    apiFetch('/dashboard/assigned').then(setMyWork Items).catch(() => {});
+    apiFetch('/dashboard/assigned').then(setmyWorkItems).catch(() => {});
   }, []);
 
   const statItems = stats ? [
@@ -580,10 +581,10 @@ function Dashboard({ user }) {
       React.createElement('div', { className: 'card' },
         React.createElement('div', { className: 'flex items-center justify-between mb-4' },
           React.createElement('div', { className: 'fw-600' }, 'My Work Items'),
-          React.createElement('span', { className: 'badge badge-' + (myWork Items.length > 0 ? 'active' : 'closed') }, myWork Items.length + ' items')
+          React.createElement('span', { className: 'badge badge-' + (myWorkItems.length > 0 ? 'active' : 'closed') }, myWorkItems.length + ' items')
         ),
-        myWork Items.length === 0 ? React.createElement('div', { style: { textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: '13px' } }, '🎉 No items assigned to you') :
-        myWork Items.slice(0, 6).map(t => React.createElement('div', { key: t.id, className: 'activity-item' },
+        myWorkItems.length === 0 ? React.createElement('div', { style: { textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: '13px' } }, '🎉 No items assigned to you') :
+        myWorkItems.slice(0, 6).map(t => React.createElement('div', { key: t.id, className: 'activity-item' },
           React.createElement('div', { className: 'activity-dot', style: { background: t.is_overdue ? '#ef4444' : '#6c63ff' } }),
           React.createElement('div', null,
             React.createElement('div', { className: 'activity-text', style: { color: 'var(--text)', fontWeight: 500 } }, t.title),
@@ -667,30 +668,30 @@ function WorkspacesPage({ user, onSelectWorkspace }) {
 // ─── PROJECT DETAIL ───────────────────────────────────────────────────────────
 function WorkspaceDetail({ workspace, user, onBack }) {
   const [detail, setDetail] = useState(null);
-  const [items, setWork Items] = useState([]);
+  const [items, setWorkItems] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [view, setView] = useState('list');
-  const [itemModal, setWork ItemModal] = useState(false);
-  const [editWork Item, setEditWork Item] = useState(null);
+  const [itemModal, setWorkitemModal] = useState(false);
+  const [editWorkItem, seteditWorkItem] = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const [addMemberUser, setAddMemberUser] = useState('');
 
   const loadWorkspace = () => apiFetch('/workspaces/' + workspace.id).then(setDetail);
-  const loadWork Items = () => apiFetch('/workspaces/' + workspace.id + '/items' + (filterStatus ? '?status=' + filterStatus : '')).then(setWork Items).finally(() => setLoading(false));
+  const loadWorkItems = () => apiFetch('/workspaces/' + workspace.id + '/items' + (filterStatus ? '?status=' + filterStatus : '')).then(setWorkItems).finally(() => setLoading(false));
   const loadUsers = () => apiFetch('/auth/users').then(setAllUsers);
 
-  useEffect(() => { loadWorkspace(); loadWork Items(); loadUsers(); }, [workspace.id, filterStatus]);
+  useEffect(() => { loadWorkspace(); loadWorkItems(); loadUsers(); }, [workspace.id, filterStatus]);
 
-  const deleteWork Item = async (id) => {
+  const deleteWorkItem = async (id) => {
     if (!confirm('Delete item?')) return;
     await apiFetch('/workspaces/' + workspace.id + '/items/' + id, { method: 'DELETE' });
-    setWork Items(t => t.filter(x => x.id !== id));
+    setWorkItems(t => t.filter(x => x.id !== id));
   };
 
   const quickStatus = async (item, status) => {
     const updated = await apiFetch('/workspaces/' + workspace.id + '/items/' + item.id, { method: 'PATCH', body: { status } });
-    setWork Items(t => t.map(x => x.id === item.id ? updated : x));
+    setWorkItems(t => t.map(x => x.id === item.id ? updated : x));
   };
 
   const addMember = async () => {
@@ -718,7 +719,7 @@ function WorkspaceDetail({ workspace, user, onBack }) {
           React.createElement('div', { className: 'page-sub' }, items.length + ' items · ' + members.length + ' members')
         )
       ),
-      React.createElement('button', { className: 'btn btn-primary', onClick: () => setWork ItemModal(true) },
+      React.createElement('button', { className: 'btn btn-primary', onClick: () => setWorkitemModal(true) },
         React.createElement(Icon, { d: Icons.plus }), 'New Work Item'
       )
     ),
@@ -750,21 +751,21 @@ function WorkspaceDetail({ workspace, user, onBack }) {
         )
       ),
       React.createElement('div', { className: 'flex gap-2' },
-        React.createElement('button', { className: 'icon-btn', onClick: () => setEditWork Item(t) }, React.createElement(Icon, { d: Icons.edit })),
-        React.createElement('button', { className: 'icon-btn', style: { color: 'var(--red)' }, onClick: () => deleteWork Item(t.id) }, React.createElement(Icon, { d: Icons.trash }))
+        React.createElement('button', { className: 'icon-btn', onClick: () => seteditWorkItem(t) }, React.createElement(Icon, { d: Icons.edit })),
+        React.createElement('button', { className: 'icon-btn', style: { color: 'var(--red)' }, onClick: () => deleteWorkItem(t.id) }, React.createElement(Icon, { d: Icons.trash }))
       )
     )))) :
 
     view === 'kanban' ? React.createElement('div', { className: 'kanban' }, statusCols.map(col => {
-      const colWork Items = items.filter(t => t.status === col);
+      const colWorkItems = items.filter(t => t.status === col);
       const labels = { backlog: 'To Do', active: 'In Progress', review: 'In Review', done: 'Done' };
       const colors = { backlog: 'var(--text3)', active: 'var(--blue)', review: 'var(--yellow)', done: 'var(--green)' };
       return React.createElement('div', { key: col, className: 'kanban-col' },
         React.createElement('div', { className: 'kanban-header' },
           React.createElement('div', { className: 'kanban-title', style: { color: colors[col] } }, labels[col]),
-          React.createElement('div', { className: 'kanban-count' }, colWork Items.length)
+          React.createElement('div', { className: 'kanban-count' }, colWorkItems.length)
         ),
-        colWork Items.map(t => React.createElement('div', { key: t.id, className: 'kanban-card', onClick: () => setEditWork Item(t) },
+        colWorkItems.map(t => React.createElement('div', { key: t.id, className: 'kanban-card', onClick: () => seteditWorkItem(t) },
           React.createElement('div', { className: 'kanban-card-title' }, t.title),
           React.createElement('div', { className: 'kanban-card-footer' },
             React.createElement(PriorityBadge, { priority: t.priority }),
@@ -799,10 +800,10 @@ function WorkspaceDetail({ workspace, user, onBack }) {
       ))
     ),
 
-    (itemModal || editWork Item) && React.createElement(Work ItemModal, {
-      item: editWork Item, workspaceId: workspace.id, members,
-      onClose: () => { setWork ItemModal(false); setEditWork Item(null); },
-      onSave: () => { loadWork Items(); setWork ItemModal(false); setEditWork Item(null); }
+    (itemModal || editWorkItem) && React.createElement(WorkitemModal, {
+      item: editWorkItem, workspaceId: workspace.id, members,
+      onClose: () => { setWorkitemModal(false); seteditWorkItem(null); },
+      onSave: () => { loadWorkItems(); setWorkitemModal(false); seteditWorkItem(null); }
     })
   );
 }
